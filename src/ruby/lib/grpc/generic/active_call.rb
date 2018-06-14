@@ -188,8 +188,8 @@ module GRPC
     # @param req [Object, String] the object to send or it's marshal form.
     # @param marshalled [false, true] indicates if the object is already
     # marshalled.
-    def remote_send(req, marshalled = false)
-      send_initial_metadata
+    def remote_send(req, marshalled = false, metadata: {})
+      send_initial_metadata(metadata)
       GRPC.logger.debug("sending #{req}, marshalled? #{marshalled}")
       payload = marshalled ? req : @marshal.call(req)
       @call.run_batch(SEND_MESSAGE => payload)
@@ -386,11 +386,13 @@ module GRPC
     # @param metadata [Hash] metadata to be sent to the server. If a value is
     # a list, multiple metadata for its key are sent
     # @return [Object] the response received from the server
-    def client_streamer(requests, metadata: {})
+    def client_streamer(requests, metadata: {}, handler: self)
       raise_error_if_already_executed
       begin
         send_initial_metadata(metadata)
-        requests.each { |r| @call.run_batch(SEND_MESSAGE => @marshal.call(r)) }
+        requests.each do |r|
+          handler.remote_send(r, true, metadata: metadata)
+        end
       rescue GRPC::Core::CallError => e
         receive_and_check_status # check for Cancelled
         raise e
@@ -487,7 +489,7 @@ module GRPC
     # @param metadata [Hash] metadata to be sent to the server. If a value is
     # a list, multiple metadata for its key are sent
     # @return [Enumerator, nil] a response Enumerator
-    def bidi_streamer(requests, metadata: {}, &blk)
+    def bidi_streamer(requests, metadata: {}, handler: nil, &blk)
       raise_error_if_already_executed
       # Metadata might have already been sent if this is an operation view
       begin
@@ -507,8 +509,8 @@ module GRPC
       bd = BidiCall.new(@call,
                         @marshal,
                         @unmarshal,
-                        metadata_received: @metadata_received)
-
+                        metadata_received: @metadata_received,
+                        req_view: handler)
       bd.run_on_client(requests,
                        proc { set_input_stream_done },
                        proc { set_output_stream_done },
@@ -543,7 +545,8 @@ module GRPC
         call: view,
         method: mth,
         requests: requests
-      ) do
+      ) do |opts = {}|
+        bidi_call.req_view = opts[:stream_handler] if opts[:stream_handler]
         bidi_call.run_on_server(mth, requests)
       end
     end
@@ -641,7 +644,9 @@ module GRPC
                                :send_initial_metadata,
                                :metadata_to_send,
                                :merge_metadata_to_send,
-                               :metadata_sent)
+                               :metadata_sent,
+                               :remote_send,
+                               :remote_read)
 
     # MultiReqView limits access to an ActiveCall's methods for use in
     # server client_streamer handlers.
@@ -651,7 +656,9 @@ module GRPC
                               :send_initial_metadata,
                               :metadata_to_send,
                               :merge_metadata_to_send,
-                              :metadata_sent)
+                              :metadata_sent,
+                              :remote_send,
+                              :remote_read)
 
     # Operation limits access to an ActiveCall's methods for use as
     # a Operation on the client.
@@ -661,6 +668,6 @@ module GRPC
 
     # InterceptableView further limits access to an ActiveCall's methods
     # for use in interceptors on the client, exposing only the deadline
-    InterceptableView = view_class(:deadline)
+    InterceptableView = view_class(:deadline, :remote_send, :remote_read)
   end
 end

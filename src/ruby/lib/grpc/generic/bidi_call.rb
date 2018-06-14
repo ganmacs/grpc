@@ -56,6 +56,8 @@ module GRPC
       @req_view = req_view
     end
 
+    attr_writer :req_view
+
     # Begins orchestration of the Bidi stream for a client sending requests.
     #
     # The method either returns an Enumerator of the responses, or accepts a
@@ -142,20 +144,38 @@ module GRPC
     def write_loop(requests, is_client: true, set_output_stream_done: nil)
       GRPC.logger.debug('bidi-write-loop: starting')
       count = 0
-      requests.each do |req|
-        GRPC.logger.debug("bidi-write-loop: #{count}")
-        count += 1
-        payload = @marshal.call(req)
-        # Fails if status already received
-        begin
-          @req_view.send_initial_metadata unless @req_view.nil?
-          @call.run_batch(SEND_MESSAGE => payload)
-        rescue GRPC::Core::CallError => e
-          # This is almost definitely caused by a status arriving while still
-          # writing. Don't re-throw the error
-          GRPC.logger.warn('bidi-write-loop: ended with error')
-          GRPC.logger.warn(e)
-          break
+      if @req_view.nil?
+        requests.each do |req|
+          GRPC.logger.debug("bidi-write-loop: #{count}")
+          count += 1
+
+          payload = @marshal.call(req)
+          # Fails if status already received
+          begin
+            @req_view.send_initial_metadata
+            @call.run_batch(SEND_MESSAGE => payload)
+          rescue GRPC::Core::CallError => e
+            # This is almost definitely caused by a status arriving while still
+            # writing. Don't re-throw the error
+            GRPC.logger.warn('bidi-write-loop: ended with error')
+            GRPC.logger.warn(e)
+            break
+          end
+        end
+      else
+        requests.each do |req|
+          GRPC.logger.debug("bidi-write-loop: #{count}")
+          count += 1
+
+          begin
+            @req_view.remote_send(req, false)
+          rescue GRPC::Core::CallError => e
+            # This is aslmost definitely caused by a status arriving while still
+            # writing. Don't re-throw the error
+            GRPC.logger.warn('bidi-write-loop: ended with error')
+            GRPC.logger.warn(e)
+            break
+          end
         end
       end
       GRPC.logger.debug("bidi-write-loop: #{count} writes done")
