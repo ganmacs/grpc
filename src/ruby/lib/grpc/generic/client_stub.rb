@@ -245,14 +245,16 @@ module GRPC
         c.merge_metadata_to_send(metadata)
         op = c.operation
         op.define_singleton_method(:execute) do
-          interception_context.intercept!(:client_streamer, intercept_args) do
-            c.client_streamer(requests)
+          interception_context
+            .intercept!(:client_streamer, intercept_args) do |opts = {}|
+            c.client_streamer(requests, handler: opts[:stream_handler])
           end
         end
         op
       else
-        interception_context.intercept!(:client_streamer, intercept_args) do
-          c.client_streamer(requests, metadata: metadata)
+        interception_context
+          .intercept!(:client_streamer, intercept_args) do |opts = {}|
+          c.client_streamer(requests, metadata: metadata, handler: opts[:stream_handler])
         end
       end
     end
@@ -459,14 +461,14 @@ module GRPC
         c.merge_metadata_to_send(metadata)
         op = c.operation
         op.define_singleton_method(:execute) do
-          interception_context.intercept!(:bidi_streamer, intercept_args) do
-            c.bidi_streamer(requests, &blk)
+          interception_context.intercept!(:bidi_streamer, intercept_args) do |opts = {}|
+            c.bidi_streamer(requests, handler: opts[:stream_handler], &blk)
           end
         end
         op
       else
-        interception_context.intercept!(:bidi_streamer, intercept_args) do
-          c.bidi_streamer(requests, metadata: metadata, &blk)
+        interception_context.intercept!(:bidi_streamer, intercept_args) do |opts = {}|
+          c.bidi_streamer(requests, metadata: metadata, handler: opts[:stream_handler], &blk)
         end
       end
     end

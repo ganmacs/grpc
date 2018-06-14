@@ -172,13 +172,15 @@ module GRPC
       i = @interceptors.pop
       return yield unless i
 
-      i.send(type, args) do
+      i.send(type, args) do |opts = {}|
+        handler = opts[:stream_handler] || args[:call]
+
         if @interceptors.any?
-          intercept!(type, args) do
-            yield
+          intercept!(type, args.merge(call: handler)) do
+            yield(stream_handler: handler)
           end
         else
-          yield
+          yield(stream_handler: handler)
         end
       end
     end

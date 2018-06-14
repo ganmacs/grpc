@@ -56,7 +56,7 @@ module GRPC
         method: mth,
         call: call,
         request: req
-      ) do
+      ) do |_opts|
         resp = mth.call(req, call)
         active_call.server_unary_response(
           resp,
@@ -72,8 +72,9 @@ module GRPC
         :client_streamer,
         method: mth,
         call: call
-      ) do
-        resp = mth.call(call)
+      ) do |opts = {}|
+        handler = (opts[:stream_handler] || call)
+        resp = mth.call(handler)
         active_call.server_unary_response(
           resp,
           trailing_metadata: active_call.output_metadata
@@ -90,9 +91,10 @@ module GRPC
         method: mth,
         call: call,
         request: req
-      ) do
-        replies = mth.call(req, call)
-        replies.each { |r| active_call.remote_send(r) }
+      ) do |opts = {}|
+        handler = opts[:stream_handler] || call
+        replies = mth.call(req, handler)
+        replies.each { |r| handler.remote_send(r) }
         send_status(active_call, OK, 'OK', active_call.output_metadata)
       end
     end
