@@ -58,10 +58,12 @@ module GRPC
         request: req
       ) do |_opts|
         resp = mth.call(req, call)
-        active_call.server_unary_response(
+        status = active_call.server_unary_response(
           resp,
           trailing_metadata: active_call.output_metadata
         )
+        status.metadata[:response] = resp
+        status
       end
     end
 
@@ -75,10 +77,12 @@ module GRPC
       ) do |opts = {}|
         handler = (opts[:stream_handler] || call)
         resp = mth.call(handler)
-        active_call.server_unary_response(
+        status = active_call.server_unary_response(
           resp,
           trailing_metadata: active_call.output_metadata
         )
+        status.metadata[:response] = resp
+        status
       end
     end
 
