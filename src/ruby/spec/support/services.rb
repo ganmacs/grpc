@@ -1,4 +1,4 @@
-# Copyright 2017 gRPC authors.
+# Copyright 2018 gRPC authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,12 +17,19 @@ require 'grpc'
 
 # A test message
 class EchoMsg
-  def self.marshal(_o)
-    ''
+  attr_reader :value
+
+  # @params value [String]
+  def initialize(value)
+    @value = value
   end
 
-  def self.unmarshal(_o)
-    EchoMsg.new
+  def self.marshal(obj)
+    obj.value
+  end
+
+  def self.unmarshal(v)
+    EchoMsg.new(v)
   end
 end
 
@@ -50,19 +57,25 @@ class EchoService
   def a_client_streaming_rpc(call)
     # iterate through requests so call can complete
     call.output_metadata.update(@trailing_metadata)
-    call.each_remote_read.each { |r| p r }
-    EchoMsg.new
+    ret = []
+    call.each_remote_read.each do |r|
+      GRPC.logger.info(r)
+      ret << r.value
+    end
+    EchoMsg.new(ret.join('/'))
   end
 
   def a_server_streaming_rpc(_req, call)
     call.output_metadata.update(@trailing_metadata)
-    [EchoMsg.new, EchoMsg.new]
+    [EchoMsg.new('hey1'), EchoMsg.new('hey2')]
   end
 
   def a_bidi_rpc(requests, call)
     call.output_metadata.update(@trailing_metadata)
-    requests.each { |r| p r }
-    [EchoMsg.new, EchoMsg.new]
+    requests.map do |r|
+      GRPC.logger.info(r)
+      EchoMsg.new("#{r.value}-hey")
+    end
   end
 end
 
@@ -80,9 +93,9 @@ class TestServerInterceptor < GRPC::ServerInterceptor
 
   def client_streamer(call:, method:)
     call.output_metadata[:interc] = 'from_client_streamer'
-    call.each_remote_read.each do |r|
-      GRPC.logger.info("In interceptor: #{r}")
-    end
+    # call.each_remote_read.each do |r|
+    #   GRPC.logger.info("In interceptor: #{r}")
+    # end
     GRPC.logger.info(
       "Received client streamer call at method #{method} for call #{call}"
     )
@@ -97,9 +110,9 @@ class TestServerInterceptor < GRPC::ServerInterceptor
   end
 
   def bidi_streamer(requests:, call:, method:)
-    requests.each do |r|
-      GRPC.logger.info("Bidi request: #{r}")
-    end
+    # requests.each do |r|
+    #   GRPC.logger.info("Bidi request: #{r}")
+    # end
     GRPC.logger.info("Received bidi streamer call at method #{method} with requests" \
       " #{requests} for call #{call}")
     call.output_metadata[:interc] = 'from_bidi_streamer'
