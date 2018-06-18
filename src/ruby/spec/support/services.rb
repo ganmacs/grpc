@@ -93,13 +93,10 @@ class TestServerInterceptor < GRPC::ServerInterceptor
 
   def client_streamer(call:, method:)
     call.output_metadata[:interc] = 'from_client_streamer'
-    # call.each_remote_read.each do |r|
-    #   GRPC.logger.info("In interceptor: #{r}")
-    # end
     GRPC.logger.info(
       "Received client streamer call at method #{method} for call #{call}"
     )
-    yield
+    yield(stream_handler: ServerStream.new(call))
   end
 
   def server_streamer(request:, call:, method:)
@@ -110,13 +107,28 @@ class TestServerInterceptor < GRPC::ServerInterceptor
   end
 
   def bidi_streamer(requests:, call:, method:)
-    # requests.each do |r|
-    #   GRPC.logger.info("Bidi request: #{r}")
-    # end
     GRPC.logger.info("Received bidi streamer call at method #{method} with requests" \
       " #{requests} for call #{call}")
     call.output_metadata[:interc] = 'from_bidi_streamer'
-    yield
+    yield(stream_handler: ServerStream.new(call))
+  end
+end
+
+class ServerStream
+  def initialize(handler)
+    @handler = handler
+  end
+
+  def remote_send(req, marshalled = false, metadata: {})
+    @handler.remote_send(req, marshalled, metadata: metadata).tap do
+      GRPC.logger.info("remote_send: #{req.to_h}")
+    end
+  end
+
+  def remote_read
+    @handler.remote_read.tap do |v|
+      GRPC.logger.info("remote_read #{v}") unless v
+    end
   end
 end
 
