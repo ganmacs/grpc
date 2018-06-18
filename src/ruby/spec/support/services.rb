@@ -17,12 +17,19 @@ require 'grpc'
 
 # A test message
 class EchoMsg
-  def self.marshal(_o)
-    ''
+  attr_reader :value
+
+  # @params value [String]
+  def initialize(value = 'hello')
+    @value = value
   end
 
-  def self.unmarshal(_o)
-    EchoMsg.new
+  def self.marshal(obj)
+    obj.value
+  end
+
+  def self.unmarshal(v)
+    EchoMsg.new(v)
   end
 end
 
@@ -50,23 +57,25 @@ class EchoService
   def a_client_streaming_rpc(call)
     # iterate through requests so call can complete
     call.output_metadata.update(@trailing_metadata)
+    ret = []
     call.each_remote_read.each do |r|
       GRPC.logger.info(r)
+      ret << r.value
     end
-    EchoMsg.new
+    EchoMsg.new(ret.join('/'))
   end
 
   def a_server_streaming_rpc(_req, call)
     call.output_metadata.update(@trailing_metadata)
-    [EchoMsg.new, EchoMsg.new]
+    [EchoMsg.new('hey1'), EchoMsg.new('hey2')]
   end
 
   def a_bidi_rpc(requests, call)
     call.output_metadata.update(@trailing_metadata)
-    requests.each do |r|
+    requests.map do |r|
       GRPC.logger.info(r)
+      EchoMsg.new("#{r.value}-hey")
     end
-    [EchoMsg.new, EchoMsg.new]
   end
 end
 
