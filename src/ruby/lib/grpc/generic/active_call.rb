@@ -260,12 +260,12 @@ module GRPC
     end
 
     def get_message_from_batch_result(recv_message_batch_result)
-      unless recv_message_batch_result.nil? ||
-             recv_message_batch_result.message.nil?
-        return @unmarshal.call(recv_message_batch_result.message)
+      if batch_result.nil? || batch_result.message.nil?
+        GRPC.logger.debug('found nil; the final response has been sent')
+        nil
+      else
+        @unmarshal.call(recv_message_batch_result.message)
       end
-      GRPC.logger.debug('found nil; the final response has been sent')
-      nil
     end
 
     # each_remote_read passes each response to the given block or returns an
@@ -537,7 +537,8 @@ module GRPC
         metadata_received: @metadata_received,
         req_view: view
       )
-      requests = bidi_call.read_next_loop(proc { set_input_stream_done }, false)
+      finilized = proc { set_input_stream_done }
+      requests = bidi_call.read_next_loop(finilized, is_client: false)
       interception_ctx.intercept!(
         :bidi_streamer,
         call: view,

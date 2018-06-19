@@ -460,18 +460,49 @@ module GRPC
         op = c.operation
         op.define_singleton_method(:execute) do
           interception_context.intercept!(:bidi_streamer, intercept_args) do
-            c.bidi_streamer(requests, &blk)
+            inner_bidi_streamer(requests, &blk)
           end
         end
         op
       else
         interception_context.intercept!(:bidi_streamer, intercept_args) do
-          c.bidi_streamer(requests, metadata: metadata, &blk)
+          inner_bidi_streamer(requests, metadata: metadata, &blk)
         end
       end
     end
 
     private
+
+    def inner_bidi_streamer(requests, metadata: {})
+      t = Thread.new do
+        begin
+          requests.each do |req|
+            @call.remote_send(req)
+          end
+
+          # done
+          @call.run_batch(SEND_CLOSE_FROM_CLIENT => nil)
+        ensure
+          set_output_stream_done.call
+        end
+      end
+
+      @call.each_remote_read.each { |resp| yield(resp) }
+
+      # done
+      batch_result = @call.run_batch(RECV_STATUS_ON_CLIENT => nil)
+      @call.status = batch_result.status
+      @call.trailing_metadata = @call.status.metadata if @call.status
+      GRPC.logger.debug("bidi-read-loop: done status #{@call.status}")
+      batch_result.check_status
+    rescue StandardError => e
+      GRPC.logger.warn("bidi-write-loop: failed #{e}")
+      @call.cancel_with_status(GRPC::Core::StatusCodes::UNKNOWN, "GRPC bidi call error: #{e.inspect}")
+
+      raise e
+    ensure
+      t.join
+    end
 
     # Creates a new active stub
     #

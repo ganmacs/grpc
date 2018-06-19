@@ -103,7 +103,25 @@ module GRPC
     # @param [Array<GRPC::InterceptionContext>] inter_ctx
     #
     def handle_bidi_streamer(active_call, mth, inter_ctx)
-      active_call.run_server_bidi(mth, inter_ctx)
+      view = active_call.multi_req_view
+      inter_ctx.intercept!(:bidi_streamer, call: view, method: mth) do
+        begin
+          requests = @call.each_remote_read
+          response =
+            if mth.arity == 1
+              mth.call(requests)
+            elsif mth.arity == 2
+              mth.call(requests, view)
+            else
+              fail 'Illegal arity of reply generator'
+            end
+
+          response.each { |resp| remote_send(resp) }
+        rescue StandardError => e
+          GRPC.logger.warn("bidi-write-loop: failed #{e}")
+        end
+      end
+
       send_status(active_call, OK, 'OK', active_call.output_metadata)
     end
 
