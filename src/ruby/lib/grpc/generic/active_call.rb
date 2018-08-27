@@ -195,6 +195,21 @@ module GRPC
       @call.run_batch(SEND_MESSAGE => payload)
     end
 
+    # This method send responses as Trailers-Only which is used for returng error message to retry.
+    # https://github.com/grpc/grpc/blob/0761cfc0e94a23d05a7b4c250dd708708ccf2411/doc/PROTOCOL-HTTP2.md#responses
+    def response_status_trailers_only(code = OK, details = '', assert_finished = false, metadata: {})
+      ops = {
+        SEND_INITIAL_METADATA => metadata,
+        SEND_STATUS_FROM_SERVER => Struct::Status.new(code, details, metadata)
+      }
+      ops[RECV_CLOSE_ON_SERVER] = nil if assert_finished
+
+      @call.run_batch(ops)
+      set_output_stream_done
+
+      nil
+    end
+
     # send_status sends a status to the remote endpoint.
     #
     # @param code [int] the status code to send
