@@ -356,7 +356,7 @@ module GRPC
 
     # Sends RESOURCE_EXHAUSTED if there are too many unprocessed jobs
     def available?(an_rpc)
-      return an_rpc if @pool.ready_for_work?
+      # return an_rpc if @pool.ready_for_work?
       GRPC.logger.warn('no free worker threads currently')
       noop = proc { |x| x }
 
