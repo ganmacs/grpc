@@ -73,6 +73,13 @@ module GRPC
 
     # Starts running the jobs in the thread pool.
     def start
+      Thread.start do
+        loop do
+          sleep 1
+          p "ready_workers=#{@ready_workers.size},worker_size=#{@workers.size}"
+        end
+      end
+
       @stop_mutex.synchronize do
         fail 'already stopped' if @stopped
       end
@@ -85,6 +92,8 @@ module GRPC
           end
           remove_current_thread
         end
+
+        next_thread.report_on_exception = true
         @workers << next_thread
       end
     end
