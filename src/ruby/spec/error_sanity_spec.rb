@@ -14,9 +14,7 @@
 
 require 'spec_helper'
 
-StatusCodes = GRPC::Core::StatusCodes
-
-describe StatusCodes do
+describe GRPC::Core::StatusCodes do
   # convert upper snake-case to camel case.
   # e.g., DEADLINE_EXCEEDED -> DeadlineExceeded
   def upper_snake_to_camel(name)

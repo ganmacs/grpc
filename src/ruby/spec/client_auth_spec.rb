@@ -78,8 +78,6 @@ end
 SslTestServiceStub = SslTestService.rpc_stub_class
 
 describe 'client-server auth' do
-  RpcServer = GRPC::RpcServer
-
   before(:all) do
     server_opts = {
       poll_period: 1
